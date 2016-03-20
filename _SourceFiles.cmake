@@ -6,6 +6,8 @@ set(SubDirs)
 
 set(DirFiles
     main.cpp
+    driver/ControlInterface.cpp
+    driver/ControlInterface.h
 
     _SourceFiles.cmake
 )

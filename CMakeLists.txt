@@ -67,7 +67,21 @@ if (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
     endif (ENABLE_CUSTOM_GCC_FLAGS)
 endif (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
 
+set (CUSTOM_HEADERS)
 set (CUSTOM_LIBRARIES)
+
+set(Boost_USE_STATIC_LIBS off)
+set(Boost_USE_MULTITHREADED on)
+set(Boost_USE_STATIC_RUNTIME off)
+find_package(Boost REQUIRED libdate_time)
+if (Boost_FOUND)
+    set(CUSTOM_HEADERS ${CUSTOM_HEADERS} ${Boost_INCLUDE_DIRS})
+    set(CUSTOM_LIBRARIES ${CUSTOM_LIBRARIES} ${Boost_LIBRARIES})
+    message("${Boost_LIBRARYDIR}")
+    message("${Boost_LIBRARIES}")
+endif (Boost_FOUND)
+
+include_directories(${CUSTOM_HEADERS})
 
 # Including the source files of all source subfolders recursively
 
