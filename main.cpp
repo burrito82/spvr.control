@@ -105,7 +105,8 @@ void ReceiveUdp()
                     std::swap(aBuffer.c[iByte], aBuffer.c[iByte + 3]);
                     std::swap(aBuffer.c[iByte + 1], aBuffer.c[iByte + 2]);
                 }
-                std::cout << "received: (" << uBytesRead << ") {" << aBuffer.f[0] << ", \t"
+                std::cout << "received: (" << uBytesRead << ") {"
+                    << aBuffer.f[0] << ", \t"
                     << aBuffer.f[1] << ", \t"
                     << aBuffer.f[2] << ", \t"
                     << aBuffer.f[3] << "}" << "                          \r";//<< std::endl;
@@ -158,7 +159,7 @@ int main(int argc, char const *argv[])
     } while (strLogLine.empty());
     std::cout << "connected!" << std::endl;
 
-    std::ofstream oLogFileHandle{"latest.log", std::ofstream::out};
+    /*std::ofstream oLogFileHandle{"latest.log", std::ofstream::out};
     int iEmptyMsgCounter = 0;
     while (iEmptyMsgCounter < 10000)
     {
@@ -175,7 +176,7 @@ int main(int argc, char const *argv[])
         }
         std::this_thread::sleep_for(std::chrono::milliseconds{5});
         strLogLine = oControlInterface.PullLog();
-    }
+    }*/
 
     std::cout << "[ ] No new message, stopped pulling! (driver might still be running!)" << std::endl;
     std::cin.ignore();
