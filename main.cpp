@@ -77,6 +77,7 @@ static smartvr::ControlInterface *pControlInterface = nullptr;
 
 void ReceiveUdp()
 {
+    std::int32_t m_iLastMsg = -1;
     while (true)
     {
         try
@@ -90,7 +91,11 @@ void ReceiveUdp()
             union
             {
                 char c[0xff];
-                float f[4];
+                struct
+                {
+                    float f[4];
+                    std::int32_t m_iCounter;
+                };
             } aBuffer;
             std::memset(aBuffer.c, 0, sizeof(aBuffer.c));
             boost::system::error_code oError{};
@@ -105,6 +110,14 @@ void ReceiveUdp()
                     std::swap(aBuffer.c[iByte], aBuffer.c[iByte + 3]);
                     std::swap(aBuffer.c[iByte + 1], aBuffer.c[iByte + 2]);
                 }
+                if (aBuffer.m_iCounter > m_iLastMsg || aBuffer.m_iCounter < 1000)
+                {
+                    m_iLastMsg = aBuffer.m_iCounter;
+                }
+                else
+                {
+                    continue;
+                }
                 std::cout << "received: (" << uBytesRead << ") {"
                     << aBuffer.f[0] << ", \t"
                     << aBuffer.f[1] << ", \t"
@@ -115,7 +128,7 @@ void ReceiveUdp()
                 //glm::quat qRotation = glm::rotation(glm::vec3{0.0f, 0.0f, -1.0f}, v3ViewDir);
                 glm::quat qRotation{aBuffer.f[0], aBuffer.f[1], aBuffer.f[2], aBuffer.f[3]};
                 static glm::quat qPreviousRotation = qRotation;
-                float const fAlpha = 0.25f;
+                float const fAlpha = 0.75f;
                 qRotation.w = fAlpha * qRotation.w + (1.0f - fAlpha) * qPreviousRotation.w;
                 qRotation.x = fAlpha * qRotation.x + (1.0f - fAlpha) * qPreviousRotation.x;
                 qRotation.y = fAlpha * qRotation.y + (1.0f - fAlpha) * qPreviousRotation.y;
