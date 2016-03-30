@@ -1,7 +1,7 @@
 # $Id:$
 
 cmake_minimum_required(VERSION 2.8)
-project(SmartVRControl)
+project(SPVRControl)
 
 # gcc
 option(ENABLE_CUSTOM_GCC_FLAGS "g++ specific flags" on)
@@ -87,8 +87,8 @@ include_directories(${CUSTOM_HEADERS})
 
 include("./_SourceFiles.cmake")
 
-add_executable(SmartVRControl ${ProjectSources})
-target_link_libraries(SmartVRControl
+add_executable(SPVRControl ${ProjectSources})
+target_link_libraries(SPVRControl
     ${CUSTOM_LIBRARIES}
 )
 

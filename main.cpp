@@ -23,7 +23,7 @@ char const copyright[] =
 #include <thread>
 #include <vector>
 
-static smartvr::ControlInterface *pControlInterface = nullptr;
+static spvr::ControlInterface *pControlInterface = nullptr;
 
 /*void ReceiveTcp()
 {
@@ -157,7 +157,7 @@ int main(int argc, char const *argv[])
 	std::copy(vecArgs.begin(), vecArgs.end(), std::ostream_iterator<std::string>(std::cout, ", "));
     std::cout << "\n=== SmartVR Control ===" << std::endl;
 
-    smartvr::ControlInterface oControlInterface{};
+    spvr::ControlInterface oControlInterface{};
     pControlInterface = &oControlInterface;
 
     auto oThread = std::thread{ReceiveUdp};
