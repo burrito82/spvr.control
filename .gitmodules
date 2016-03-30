@@ -1,4 +1,4 @@
 [submodule "driver"]
 	path = driver
-	url = ssh://git@git.root13.de:44/burrito82/smartvr.driver.git
+	url = ssh://git@github.com/burrito82/spvr.driver.git
 	branch = master
