@@ -1,14 +1,12 @@
 # $Id:$
 
-set(RelativeDir ".")
-set(RelativeSourceGroup "src")
-set(SubDirs json)
+set(RelativeDir "./json/")
+set(RelativeSourceGroup "src\\json")
+set(SubDirs)
 
 set(DirFiles
-    jsoncpp.cpp
-    main.cpp
-    driver/ControlInterface.cpp
-    driver/ControlInterface.h
+    json.h
+    json-forwards.h
 
     _SourceFiles.cmake
 )

@@ -8,6 +8,7 @@ char const copyright[] =
 
 #include "driver/ControlInterface.h"
 #include "driver/glm/gtx/quaternion.hpp"
+#include "json/json.h"
 
 #include <boost/array.hpp>
 #include <boost/asio.hpp>
@@ -23,9 +24,52 @@ char const copyright[] =
 #include <thread>
 #include <vector>
 
-static spvr::ControlInterface *pControlInterface = nullptr;
+static spvr::ControlInterface *g_pControlInterface = nullptr;
 
-/*void ReceiveTcp()
+struct SpvrPacket
+{
+    float f[4];
+    std::int32_t m_iCounter;
+};
+
+union SpvrPacketByteHack
+{
+    char c[sizeof(SpvrPacket)];
+    SpvrPacket data;
+};
+
+void NtoH(SpvrPacketByteHack &packet)
+{
+    // not the way to to... UB!
+    for (int iByte = 0; iByte < sizeof(packet.c); iByte += 4)
+    {
+        std::swap(packet.c[iByte], packet.c[iByte + 3]);
+        std::swap(packet.c[iByte + 1], packet.c[iByte + 2]);
+    }
+}
+
+void ProcessPacket(SpvrPacket const &packet)
+{
+    std::cout << "received: {"
+        << packet.f[0] << ", \t"
+        << packet.f[1] << ", \t"
+        << packet.f[2] << ", \t"
+        << packet.f[3] << "}" << "                          \r";//<< std::endl;
+
+    glm::quat qRotation{packet.f[0], packet.f[1], packet.f[2], packet.f[3]};
+    static glm::quat qPreviousRotation = qRotation;
+    float const fAlpha = 0.90f;
+    qRotation.w = fAlpha * qRotation.w + (1.0f - fAlpha) * qPreviousRotation.w;
+    qRotation.x = fAlpha * qRotation.x + (1.0f - fAlpha) * qPreviousRotation.x;
+    qRotation.y = fAlpha * qRotation.y + (1.0f - fAlpha) * qPreviousRotation.y;
+    qRotation.z = fAlpha * qRotation.z + (1.0f - fAlpha) * qPreviousRotation.z;
+    qRotation = glm::normalize(qRotation);
+    qPreviousRotation = qRotation;
+
+    g_pControlInterface->SetRotation(qRotation);
+}
+
+void ReceiveTcp()
 {
     while (true)
     {
@@ -37,35 +81,15 @@ static spvr::ControlInterface *pControlInterface = nullptr;
             tcp::socket oSocket{oIoService};
             oAcceptor.accept(oSocket);
 
-            //boost::array<char, 0xff> aBuffer{};
-            union
-            {
-                char c[0xff];
-                float f[4];
-            } aBuffer;
-            std::memset(aBuffer.c, 0, sizeof(aBuffer.c));
+            SpvrPacketByteHack oPacket;
+            std::memset(oPacket.c, 0, sizeof(oPacket.c));
             boost::system::error_code oError{};
 
             while (oError != boost::asio::error::eof)
             {
-                auto uBytesRead = oSocket.read_some(boost::asio::buffer(aBuffer.c), oError);
-                for (int iByte = 0; iByte < 0xff; iByte += 4)
-                {
-                    std::swap(aBuffer.c[iByte], aBuffer.c[iByte + 3]);
-                    std::swap(aBuffer.c[iByte + 1], aBuffer.c[iByte + 2]);
-                }
-                std::cout << "received: (" << uBytesRead << ") {" << aBuffer.f[0] << ", "
-                    << aBuffer.f[1] << ", "
-                    << aBuffer.f[2] << ", "
-                    << aBuffer.f[3] << "}" << std::endl;
-
-                glm::vec3 const v3ViewDir{aBuffer.f[0], aBuffer.f[1], aBuffer.f[2]};
-                glm::quat const qRotation = glm::rotation(glm::vec3{0.0f, 0.0f, -1.0f}, v3ViewDir);
-
-                if (pControlInterface)
-                {
-                    pControlInterface->SetRotation(qRotation);
-                }
+                auto uBytesRead = oSocket.read_some(boost::asio::buffer(oPacket.c), oError);
+                NtoH(oPacket);
+                ProcessPacket(oPacket.data);
             }
         }
         catch (...)
@@ -73,7 +97,7 @@ static spvr::ControlInterface *pControlInterface = nullptr;
             std::cout << "some error occurred..." << std::endl;
         }
     }
-}*/
+}
 
 void ReceiveUdp()
 {
@@ -87,59 +111,25 @@ void ReceiveUdp()
             udp::endpoint oEndpoint{udp::v4(), 4321};
             udp::socket oSocket{oIoService, oEndpoint};
 
-            //boost::array<char, 0xff> aBuffer{};
-            union
-            {
-                char c[0xff];
-                struct
-                {
-                    float f[4];
-                    std::int32_t m_iCounter;
-                };
-            } aBuffer;
-            std::memset(aBuffer.c, 0, sizeof(aBuffer.c));
+            SpvrPacketByteHack oPacket;
+            std::memset(oPacket.c, 0, sizeof(oPacket.c));
             boost::system::error_code oError{};
 
             while (oError != boost::asio::error::eof)
             {
                 //auto uBytesRead = oSocket.read_some(boost::asio::buffer(aBuffer.c), oError);
                 //auto uBytesRead = oSocket.receive_from(boost::asio::buffer(aBuffer.c), oEndpoint, 0, oError);
-                auto uBytesRead = oSocket.receive(boost::asio::buffer(aBuffer.c));
-                for (int iByte = 0; iByte < 0xff; iByte += 4)
+                auto uBytesRead = oSocket.receive(boost::asio::buffer(oPacket.c));
+                NtoH(oPacket);
+                if (oPacket.data.m_iCounter > m_iLastMsg || oPacket.data.m_iCounter < 1000)
                 {
-                    std::swap(aBuffer.c[iByte], aBuffer.c[iByte + 3]);
-                    std::swap(aBuffer.c[iByte + 1], aBuffer.c[iByte + 2]);
-                }
-                if (aBuffer.m_iCounter > m_iLastMsg || aBuffer.m_iCounter < 1000)
-                {
-                    m_iLastMsg = aBuffer.m_iCounter;
+                    m_iLastMsg = oPacket.data.m_iCounter;
                 }
                 else
                 {
                     continue;
                 }
-                std::cout << "received: (" << uBytesRead << ") {"
-                    << aBuffer.f[0] << ", \t"
-                    << aBuffer.f[1] << ", \t"
-                    << aBuffer.f[2] << ", \t"
-                    << aBuffer.f[3] << "}" << "                          \r";//<< std::endl;
-
-                //glm::vec3 const v3ViewDir{aBuffer.f[0], aBuffer.f[1], aBuffer.f[2]};
-                //glm::quat qRotation = glm::rotation(glm::vec3{0.0f, 0.0f, -1.0f}, v3ViewDir);
-                glm::quat qRotation{aBuffer.f[0], aBuffer.f[1], aBuffer.f[2], aBuffer.f[3]};
-                static glm::quat qPreviousRotation = qRotation;
-                float const fAlpha = 0.75f;
-                qRotation.w = fAlpha * qRotation.w + (1.0f - fAlpha) * qPreviousRotation.w;
-                qRotation.x = fAlpha * qRotation.x + (1.0f - fAlpha) * qPreviousRotation.x;
-                qRotation.y = fAlpha * qRotation.y + (1.0f - fAlpha) * qPreviousRotation.y;
-                qRotation.z = fAlpha * qRotation.z + (1.0f - fAlpha) * qPreviousRotation.z;
-                qRotation = glm::normalize(qRotation);
-                qPreviousRotation = qRotation;
-
-                if (pControlInterface)
-                {
-                    pControlInterface->SetRotation(qRotation);
-                }
+                ProcessPacket(oPacket.data);
             }
         }
         catch (...)
@@ -152,14 +142,48 @@ void ReceiveUdp()
 int main(int argc, char const *argv[])
 {
 	std::vector<std::string> vecArgs(argv, argv + argc);
+    std::string strJsonConfigFile = "config.json";
+    if (vecArgs.size() > 1)
+    {
+        strJsonConfigFile = vecArgs[1];
+    }
 
+    std::cout << "=== SmartVR Control ===" << std::endl;
     std::cout << copyright << std::endl;
-	std::copy(vecArgs.begin(), vecArgs.end(), std::ostream_iterator<std::string>(std::cout, ", "));
-    std::cout << "\n=== SmartVR Control ===" << std::endl;
 
     spvr::ControlInterface oControlInterface{};
-    pControlInterface = &oControlInterface;
+    // GLOBAL VARIABLE...
+    g_pControlInterface = &oControlInterface;
 
+    {
+        std::ifstream oJsonConfigFile{strJsonConfigFile, std::ifstream::in};
+        if (oJsonConfigFile)
+        {
+            std::cout << "[ ] reading configuration from " << strJsonConfigFile << std::endl;
+            Json::Value jsonRoot{};
+            oJsonConfigFile >> jsonRoot;
+            auto const jsonDistortionK0 = jsonRoot["distortion-k0"];
+            auto const jsonDistortionK1 = jsonRoot["distortion-k1"];
+            if (!jsonDistortionK0.empty() && !jsonDistortionK1.empty())
+            {
+                auto const k0 = jsonDistortionK0.asFloat();
+                auto const k1 = jsonDistortionK1.asFloat();
+                oControlInterface.SetDistortionCoefficients(k0, k1);
+            }
+
+            if (!jsonRoot["distortion-scale"].empty())
+            {
+                oControlInterface.SetDistortionScale(jsonRoot["distortion-scale"].asFloat());
+            }
+        }
+    }
+
+    float k0, k1;
+    oControlInterface.GetDistortionCoefficients(k0, k1);
+    std::cout << "[.] Distortion coefficients: " << k0 << ", " << k1 << std::endl;
+    std::cout << "[.] Distortion scale: " << oControlInterface.GetDistortionScale() << std::endl;
+
+    //auto oThread = std::thread{ReceiveTcp};
     auto oThread = std::thread{ReceiveUdp};
 
     std::string strLogLine{};
@@ -172,7 +196,7 @@ int main(int argc, char const *argv[])
     } while (strLogLine.empty());
     std::cout << "connected!" << std::endl;
 
-    /*std::ofstream oLogFileHandle{"latest.log", std::ofstream::out};
+    std::ofstream oLogFileHandle{"latest.log", std::ofstream::out};
     int iEmptyMsgCounter = 0;
     while (iEmptyMsgCounter < 10000)
     {
@@ -182,14 +206,14 @@ int main(int argc, char const *argv[])
         }
         else
         {
-            std::cout << "LOG: " << strLogLine;
+            std::cout << strLogLine;
             oLogFileHandle << strLogLine;
             std::cout.flush();
             iEmptyMsgCounter = 0;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds{5});
         strLogLine = oControlInterface.PullLog();
-    }*/
+    }
 
     std::cout << "[ ] No new message, stopped pulling! (driver might still be running!)" << std::endl;
     std::cin.ignore();
