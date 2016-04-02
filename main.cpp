@@ -12,6 +12,7 @@ char const copyright[] =
 
 #include <boost/array.hpp>
 #include <boost/asio.hpp>
+#include <boost/endian/conversion.hpp>
 
 #include <algorithm>
 #include <array>
@@ -67,6 +68,84 @@ void ProcessPacket(SpvrPacket const &packet)
     qPreviousRotation = qRotation;
 
     g_pControlInterface->SetRotation(qRotation);
+}
+
+glm::quat Ypr2Quat(float yaw, float pitch, float roll)
+{
+    auto const cyaw = std::cos(yaw * 0.5f);
+    auto const croll = std::cos(roll * 0.5f);
+    auto const cpitch = std::cos(pitch * 0.5f);
+    
+    auto const syaw = std::sin(yaw * 0.5f);
+    auto const sroll = std::sin(roll * 0.5f);
+    auto const spitch = std::sin(pitch * 0.5f);
+    
+    auto const cyaw_cpitch = cyaw * cpitch;
+    auto const syaw_spitch = syaw * spitch;
+    auto const cyaw_spitch = cyaw * spitch;
+    auto const syaw_cpitch = syaw * cpitch;
+
+    auto const w = cyaw_cpitch * croll + syaw_spitch * sroll;
+
+    auto const x = cyaw_cpitch * sroll - syaw_spitch * croll;
+    auto const y = cyaw_spitch * croll + syaw_cpitch * sroll;
+    auto const z = syaw_cpitch * croll - cyaw_spitch * sroll;
+    
+    return glm::quat{w, x, y, z};
+}
+
+void ReceiveFreePieUdp()
+{
+    std::int32_t m_iLastMsg = -1;
+    while (true)
+    {
+        try
+        {
+            using boost::asio::ip::udp;
+            boost::asio::io_service oIoService{};
+            udp::endpoint oEndpoint{udp::v4(), 5556};
+            udp::socket oSocket{oIoService, oEndpoint};
+
+#pragma pack(push, 1)
+            struct FreePiePacket
+            {
+                std::uint8_t device;
+                std::uint8_t flags;
+                float data[12];
+            };
+#pragma pack(pop)
+
+            FreePiePacket oFreePiePacket{};
+            SpvrPacket oPacket{};
+            boost::system::error_code oError{};
+
+            while (oError != boost::asio::error::eof)
+            {
+                auto uBytesRead = oSocket.receive(boost::asio::buffer(reinterpret_cast<char(&)[sizeof(oFreePiePacket)]>(oFreePiePacket)));
+                auto pRaw = reinterpret_cast<char *>(&oFreePiePacket);
+                for (int iByte = 2; iByte < sizeof(oFreePiePacket); iByte += 4)
+                {
+                    std::swap(pRaw[iByte], pRaw[iByte + 3]);
+                    std::swap(pRaw[iByte + 1], pRaw[iByte + 2]);
+                }
+
+                glm::quat const qOrientation = Ypr2Quat(
+                    oFreePiePacket.data[0],
+                    oFreePiePacket.data[2],
+                    oFreePiePacket.data[1]);
+                oPacket.f[0] = qOrientation.w;
+                oPacket.f[1] = qOrientation.x;
+                oPacket.f[2] = qOrientation.y;
+                oPacket.f[3] = qOrientation.z;
+
+                ProcessPacket(oPacket);
+            }
+        }
+        catch (...)
+        {
+            std::cout << "some error occurred..." << std::endl;
+        }
+    }
 }
 
 void ReceiveTcp()
@@ -184,7 +263,8 @@ int main(int argc, char const *argv[])
     std::cout << "[.] Distortion scale: " << oControlInterface.GetDistortionScale() << std::endl;
 
     //auto oThread = std::thread{ReceiveTcp};
-    auto oThread = std::thread{ReceiveUdp};
+    //auto oThread = std::thread{ReceiveUdp};
+    auto oThread = std::thread{ReceiveFreePieUdp};
 
     std::string strLogLine{};
     std::cout << "[ ] waiting for driver... ";
