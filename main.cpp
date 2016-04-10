@@ -184,7 +184,7 @@ int main(int argc, char const *argv[])
     std::cout << "[.] Distortion scale: " << oControlInterface.GetDistortionScale() << std::endl;
 
     //auto oThread = std::thread{ReceiveTcp};
-    auto oThread = std::thread{ReceiveUdp};
+    //auto oThread = std::thread{ReceiveUdp};
 
     std::string strLogLine{};
     std::cout << "[ ] waiting for driver... ";
@@ -198,7 +198,8 @@ int main(int argc, char const *argv[])
 
     std::ofstream oLogFileHandle{"latest.log", std::ofstream::out};
     int iEmptyMsgCounter = 0;
-    while (iEmptyMsgCounter < 10000)
+    //while (iEmptyMsgCounter < 10000)
+    while (true)
     {
         if (strLogLine.empty())
         {
